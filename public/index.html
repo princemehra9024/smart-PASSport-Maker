@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Passport Maker - Quirky Edition</title>
+    <!-- HTMX for dynamic content replacement -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Gochi+Hand&family=Lilita+One&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="bg-decorations">
+        <div class="sparkle s1">✦</div>
+        <div class="sparkle s2">★</div>
+        <div class="sparkle s3">✗</div>
+        <div class="sparkle s4">✦</div>
+        <div class="sparkle s5">★</div>
+    </div>
+
+    <main class="container">
+        <header class="header text-center">
+            <h1><span class="purple-pop">PASS</span>port <span class="small-text">Maker</span></h1>
+            <p class="subtitle">Upload your photo. We extract the subject and generate your printable canvas!</p>
+        </header>
+
+        <section class="comic-panel">
+            <form id="passport-form" hx-post="/process" hx-encoding="multipart/form-data" hx-target="#result-box" hx-indicator="#loading-indicator">
+                
+                <div class="form-group upload-area" id="upload-zone">
+                    <label for="photo-upload" class="upload-label">
+                        <div class="upload-icon">📸</div>
+                        <span id="file-chosen-text">Drag & drop or Click here!</span>
+                    </label>
+                    <input type="file" id="photo-upload" name="photo" accept="image/*" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half-width">
+                        <label for="size">Photo Sizing</label>
+                        <select name="size" id="size" class="chunky-input">
+                            <option value="us">Passport Size (2x2 inch)</option>
+                            <option value="eu">Visa Size (35x45 mm)</option>
+                            <option value="stamp">Stamp Size (20x25 mm)</option>
+                            <option value="pan">PAN Card Size (25x35 mm)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group half-width">
+                        <label for="copies">Copies Qty.</label>
+                        <input type="number" name="copies" id="copies" min="1" max="100" value="25" class="chunky-input" required>
+                    </div>
+                    
+                    <div class="form-group half-width">
+                        <label for="spacing">Gap Space</label>
+                        <select name="spacing" id="spacing" class="chunky-input">
+                            <option value="40">Normal (40px)</option>
+                            <option value="20">Paper Saver (20px)</option>
+                            <option value="10">Super Tight (10px)</option>
+                            <option value="80">Wide (80px)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="clientName">Save Reference (Optional)</label>
+                    <input type="text" name="clientName" id="clientName" placeholder="e.g. Rahul Passport..." class="chunky-input">
+                </div>
+
+                <input type="hidden" name="apikey" id="apikey" value="h2vyGTcSxkeTccuyvFUtqpYJ">
+
+                <button type="submit" class="submit-btn primary-btn">GENERATE MAGIC ✨</button>
+            </form>
+            
+            <div id="loading-indicator" class="htmx-indicator loader-container">
+                <div class="scanning-wrapper">
+                    <img id="upload-preview" src="" alt="preview" />
+                    <div class="scanner-line"></div>
+                </div>
+                <p>Removing Background... ✨</p>
+            </div>
+            
+            <div id="result-box" class="result-area">
+                <!-- HTMX replaces this content with generated results -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById('photo-upload');
+        const fileChosenText = document.getElementById('file-chosen-text');
+        const uploadZone = document.getElementById('upload-zone');
+        const uploadPreview = document.getElementById('upload-preview');
+
+        function handleFiles(files) {
+            if(files && files.length > 0) {
+                fileChosenText.textContent = files[0].name;
+                uploadZone.classList.add('has-file');
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadPreview.src = e.target.result;
+                };
+                reader.readAsDataURL(files[0]);
+            } else {
+                fileChosenText.textContent = 'Drag & drop or Click here!';
+                uploadZone.classList.remove('has-file');
+                uploadPreview.src = "";
+            }
+        }
+
+        fileInput.addEventListener('change', function(){
+            handleFiles(this.files);
+        });
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults (e) { e.preventDefault(); e.stopPropagation(); }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => uploadZone.classList.add('highlight'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => uploadZone.classList.remove('highlight'), false);
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            if (files.length) {
+                fileInput.files = files; // manually set for standard form behavior
+            }
+            handleFiles(files);
+            uploadZone.classList.remove('highlight');
+        }, false);
+
+        function printResult() {
+            const img = document.getElementById('generated-canvas');
+            if(!img) return;
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Print Passport Sheet</title>
+                    <style>
+                        @media print {
+                            @page { margin: 0; }
+                            body { margin: 0.5cm; display: flex; justify-content: center; }
+                            img { max-width: 100%; max-height: 95vh; display: block; margin: 0 auto; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <img src="${img.src}" onload="window.print(); window.close();" />
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+    </script>
+</body>
+</html>
