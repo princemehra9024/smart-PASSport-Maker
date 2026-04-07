@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/process", "destination": "/api/server" },
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/(.*)", "destination": "/public/$1" }
+  ]
+}

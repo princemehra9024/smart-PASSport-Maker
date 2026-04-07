@@ -9,10 +9,10 @@ const fs = require('fs');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.urlencoded({ extended: true }));
 
-app.post('/process', upload.single('photo'), async (req, res) => {
+app.post(['/process', '/api/server'], upload.single('photo'), async (req, res) => {
     try {
         const apiKey = req.body.apikey;
         const copies = parseInt(req.body.copies) || 25;
@@ -66,14 +66,13 @@ app.post('/process', upload.single('photo'), async (req, res) => {
             .toBuffer();
 
         // Add padding AROUND the passport crop so the full head and shoulders are properly framed
-        // Standard passport: face occupies 70-80% of height, space above head and chin visible
         const paddingPercent = 0.10; // 10% padding on all sides
         const paddedW = Math.round(passportWidth * (1 - paddingPercent * 2));
-        const paddedH = Math.round(passportHeight * (1 - paddingPercent * 2.2)); // slightly more top/bottom room
+        const paddedH = Math.round(passportHeight * (1 - paddingPercent * 2.2)); 
 
         const finalPassportImg = await sharp(bgRemovedBuffer)
             .resize(paddedW, paddedH, {
-                fit: 'contain',       // contain = no cropping, whole person fits inside
+                fit: 'contain',
                 position: 'attention',
                 background: { r: 255, g: 255, b: 255 }
             })
@@ -109,9 +108,8 @@ app.post('/process', upload.single('photo'), async (req, res) => {
 
         const compositeItems = [];
 
-        // center horizontally
         const startX = Math.round((canvasWidth - (cols * passportWidth + (cols - 1) * padding)) / 2);
-        const startY = padding; // limit to top
+        const startY = padding; 
 
         for (let i = 0; i < copies; i++) {
             const col = i % cols;
@@ -132,7 +130,7 @@ app.post('/process', upload.single('photo'), async (req, res) => {
                 width: canvasWidth,
                 height: canvasHeight,
                 channels: 3,
-                background: { r: 255, g: 255, b: 255 } // Solid white page
+                background: { r: 255, g: 255, b: 255 }
             }
         });
 
@@ -148,15 +146,21 @@ app.post('/process', upload.single('photo'), async (req, res) => {
 
         let savedMsg = '';
         if (req.body.clientName && req.body.clientName.trim() !== '') {
-            const clientBase = req.body.clientName.trim().replace(/[^a-z0-9]/gi, '_');
-            const saveDir = path.join(__dirname, 'saved_sheets');
-            if (!fs.existsSync(saveDir)) {
-                fs.mkdirSync(saveDir);
+            try {
+                const clientBase = req.body.clientName.trim().replace(/[^a-z0-9]/gi, '_');
+                const saveDir = process.env.VERCEL ? '/tmp/saved_sheets' : path.join(__dirname, '../saved_sheets');
+                if (!fs.existsSync(saveDir)) {
+                    fs.mkdirSync(saveDir, { recursive: true });
+                }
+                const filename = `${clientBase}_${Math.floor(Date.now()/1000)}.png`;
+                const savePath = path.join(saveDir, filename);
+                fs.writeFileSync(savePath, outputBuffer);
+                if (!process.env.VERCEL) {
+                    savedMsg = `<p style="color:var(--green); margin-top:5px; font-weight:bold; font-size:1.3rem;">✅ Saved locally as: <b>${filename}</b></p>`;
+                }
+            } catch (err) {
+                console.error("Failed to save locally:", err);
             }
-            const filename = `${clientBase}_${Math.floor(Date.now()/1000)}.png`;
-            const savePath = path.join(saveDir, filename);
-            fs.writeFileSync(savePath, outputBuffer);
-            savedMsg = `<p style="color:var(--green); margin-top:5px; font-weight:bold; font-size:1.3rem;">✅ Saved locally as: <b>${filename}</b></p>`;
         }
 
         res.send(`
@@ -192,7 +196,11 @@ app.post('/process', upload.single('photo'), async (req, res) => {
     }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`Server started on http://localhost:${PORT}`);
-});
+module.exports = app;
+
+if (!process.env.VERCEL) {
+    const PORT = 3000;
+    app.listen(PORT, () => {
+        console.log(`Server started on http://localhost:${PORT}`);
+    });
+}
